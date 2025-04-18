@@ -1,0 +1,8 @@
+streamlit
+pandas
+openpyxl
+smtplib
+email
+beautifulsoup4
+selenium
+plotly
