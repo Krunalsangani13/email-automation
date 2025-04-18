@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body {{font-family: Arial, sans-serif;}}
+    .btn {{
+      display: inline-block;
+      padding: 10px 20px;
+      background-color: #0073b1;
+      color: white;
+      text-decoration: none;
+      border-radius: 5px;
+      margin-top: 15px;
+    }}
+  </style>
+</head>
+
+<body>
+  <p>Hi <strong>{recipient_name}</strong>,</p>
+
+  <p>I came across your company, <strong>{company_name}</strong>, on LinkedIn and was really impressed by what you're doing in the industry.</p>
+
+  <p>We help companies like yours streamline their operations using smart automation tools — saving time, boosting efficiency, and improving ROI.</p>
+
+  <p>If this sounds interesting, I’d love to schedule a quick call to share more insights tailored to <strong>{company_name}</strong>.</p>
+
+  <a href="https://calendly.com/your-schedule-link" class="btn">Book a Call</a>
+
+  <p>Looking forward to connecting!<br><br>Best regards,<br><strong>Krunal Sangani</strong></p>
+
+  <img src="http://127.0.0.1:5000/open?email={recipient_email}" width="1" height="1" style="display:none;"/>
+  <p><a href="http://127.0.0.1:5000/click?email={recipient_email}&to=https://yourwebsite.com">Click here</a></p>
+
+</body>
+</html>
