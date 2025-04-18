@@ -1,7 +1,8 @@
 import streamlit as st
 import pandas as pd
 import threading
-import os
+import io
+import base64
 import subprocess
 import random
 from datetime import datetime
@@ -22,9 +23,12 @@ st.title("📧 Email Automation - Sales Process Suite")
 
 # === Helper: Start Flask Server ===
 def run_flask_server():
-    # os.system('start cmd /k "python tracker_server.py"')
-    os.system('start cmd /k "cd C:\\Users\\dell\\3D Objects\\tsak 1\\linkedin_scraper\ && python tracker_server.py"')
-
+    try:
+        # Ensure the path is wrapped in quotes to handle spaces
+        command = 'start cmd /k "cd C:\\Users\\dell\\3D Objects\\tsak 1\\linkedin_scraper && python tracker_server.py"'
+        subprocess.run(command, shell=True, check=True)
+    except Exception as e:
+        st.error(f"Failed to start Flask server: {str(e)}")
 
 if st.button("🚀 Start Flask Tracker"):
     # run_flask_server()
@@ -37,7 +41,7 @@ template_file = "email_template.html"  # Your email template file
 excel_file = "linkedin_companies.xlsx"  # Your Excel file with leads
 log_file = "email_log.csv"  # Log file to track email sending status
 batch_size = 5  # Number of emails to send in each batch
-delay_between_emails = 10  # Delay between sending emails (in seconds)
+delay_between_emails = 5  # Delay between sending emails (in seconds)
 
 # === Tabs for 5 Tasks ===
 tab1, tab2, tab3, tab4, tab5 = st.tabs([
@@ -214,9 +218,10 @@ with tab3:
     - These will be automatically filled in from your uploaded Excel data.
     """)
 
+    # Example HTML template
     example_html_template = """
     <html>
-        <body>
+        <body style="font-family: Arial, sans-serif; line-height:1.6;">
             <p>Hi {recipient_name},</p>
             <p>I came across your company, <b>{company_name}</b>, and I believe we can collaborate on something exciting.</p>
             <p>Would love to connect! Let me know a good time to talk.</p>
@@ -228,13 +233,14 @@ with tab3:
     """
 
     st.subheader("✉️ Subject Line")
-    subject_template = st.text_input("Enter Subject Line (supports placeholders)", 
-                                     "Exciting Collaboration with {company_name}")
-
+    subject_template = st.text_input(
+        "Enter Subject Line (supports placeholders)",
+        "Exciting Collaboration with {company_name}"
+    )
 
     st.subheader("📄 Upload or Use Example Template")
     html_file = st.file_uploader("Upload HTML Template", type=["html"])
-    
+
     if html_file:
         html_template = html_file.read().decode("utf-8")
         st.success("✅ Template uploaded successfully!")
@@ -242,7 +248,7 @@ with tab3:
         use_example = st.checkbox("Use example HTML template", value=True)
         html_template = example_html_template if use_example else ""
 
-
+    # If data exists from Excel
     if "df" in st.session_state:
         df = st.session_state.df
 
@@ -252,7 +258,7 @@ with tab3:
 
         lead_data = df[df[email_column] == contact].iloc[0].to_dict()
 
-        # Preview the Template with Selected Data
+        # Preview the template with selected data
         st.subheader("👁️ Email Preview with Selected Contact")
         try:
             rendered_subject = subject_template.format(**lead_data)
@@ -260,27 +266,51 @@ with tab3:
 
             st.markdown(f"**📬 Subject Preview:** `{rendered_subject}`")
             st.components.v1.html(rendered_html, height=300, scrolling=True)
+
+            st.subheader("📄 Raw HTML Output")
+            st.code(rendered_html, language="html")
+
         except KeyError as e:
             st.error(f"❌ Template is missing placeholder: {e}")
 
     else:
         st.subheader("👁️ Preview Template with Sample Data")
-        # Sample input
+
+        # Sample fallback data
         sample_data = {
             "recipient_name": "Alex from NovaTech",
             "company_name": "NovaTech",
             "recipient_email": "alex@novatech.com"
         }
 
-
         if html_template:
             try:
                 rendered_subject = subject_template.format(**sample_data)
                 rendered_html = html_template.format(**sample_data)
+
                 st.markdown(f"**📬 Subject Preview:** `{rendered_subject}`")
                 st.components.v1.html(rendered_html, height=300, scrolling=True)
+
+                # st.subheader("📄 Raw HTML Output")
+                # st.code(rendered_html, language="html")
+
+                st.subheader("🛠️ Editable Raw HTML Output")
+                edited_html = st.text_area("You can edit the final HTML here:", rendered_html, height=300)
+
+                # Optional: Re-render the edited HTML live
+                st.subheader("👁️ Live Preview After Editing")
+                # st.components.v1.html(edited_html, height=300, scrolling=True)
+                st.components.v1.html(f"<div style='background-color:#fff; color:#000; padding:20px;'>{edited_html}</div>", height=400)
+
             except KeyError as e:
                 st.error(f"❌ Template is missing placeholder: {e}")
+
+            st.markdown("### ⬇️ Download Your Final HTML Template")
+
+            # Prepare file
+            b64 = base64.b64encode(edited_html.encode()).decode()
+            href = f'<a href="data:text/html;base64,{b64}" download="edited_template.html">📥 Download HTML File</a>'
+            st.markdown(href, unsafe_allow_html=True)
         else:
             st.warning("⚠️ Please upload or use the example HTML template.")
 
@@ -373,8 +403,8 @@ with tab4:
                 time.sleep(delay_seconds)
 
                 if (index + 1) % batch_size == 0:
-                    st.info("⏳ Batch sent. Pausing for 60 seconds...")
-                    time.sleep(60)
+                    st.info("⏳ Batch sent. Pausing for 10 seconds...")
+                    time.sleep(10)
 
             # Show log
             log_df = pd.DataFrame(log_rows, columns=["#", "Company", "Email", "Subject", "Status", "Timestamp"])
