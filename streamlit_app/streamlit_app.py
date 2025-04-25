@@ -24,6 +24,7 @@ st.title("📧 Email Automation - Sales Process Suite")
 def run_flask_server():
     try:
         # Ensure the path is wrapped in quotes to handle spaces
+        #it is inside the analytics folder.
         command = 'start cmd /k "cd C:\\Users\\dell\\3D Objects\\tsak 1\\auto_email && python flask_app.py"'
         subprocess.run(command, shell=True, check=True)
     except Exception as e:
