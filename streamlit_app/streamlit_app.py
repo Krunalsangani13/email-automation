@@ -5,17 +5,16 @@ import io
 import base64
 import subprocess
 import random
+import os
+import smtplib
+import time
+import re
 from datetime import datetime
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
-import streamlit as st
-import smtplib
-import time
 from jinja2 import Template
 from io import BytesIO
-import re
-import threading
-import tracker_server 
+
 
 st.set_page_config(layout="wide", page_title="Email Automation Dashboard")
 
@@ -25,7 +24,7 @@ st.title("📧 Email Automation - Sales Process Suite")
 def run_flask_server():
     try:
         # Ensure the path is wrapped in quotes to handle spaces
-        command = 'start cmd /k "cd C:\\Users\\dell\\3D Objects\\tsak 1\\linkedin_scraper && python tracker_server.py"'
+        command = 'start cmd /k "cd C:\\Users\\dell\\3D Objects\\tsak 1\\auto_email && python flask_app.py"'
         subprocess.run(command, shell=True, check=True)
     except Exception as e:
         st.error(f"Failed to start Flask server: {str(e)}")
@@ -48,7 +47,7 @@ tab1, tab2, tab3, tab4, tab5 = st.tabs([
     "🔍 1. Scrape LinkedIn",
     "📂 2. Filter Leads",
     "📝 3. Create Email Template",
-    "📤 4. Send Campaign",
+    "📤 4. generate and Send Campaign Email",
     "📊 5. Analyze Campaign"
 ])
 
@@ -324,15 +323,14 @@ with tab4:
     # Sender accounts rotation setup
     senders = [
         {"email": "krunalsangani13@gmail.com", "app_password": "rvpchbeajlwrubbx"},
-        {"email": "krunaltechnocomet@gmail.com", "app_password": "ixenbagzosrwyzpd"},
-        {"email":"krunaltemp1312@gmail.com", "app_password":"tqddaorqjrvwmtld"}
+        {"email": "krunaltechnocomet@gmail.com", "app_password": "ixenbagzosrwyzpd"}
     ]
 
     # File Uploads
     template_file = st.file_uploader("📄 Upload Email HTML Template", type=["html"])
     leads_file = st.file_uploader("📊 Upload Excel File with Leads", type=["xlsx"])
 
-    # Optional configs
+    # User-defined configs
     batch_size = st.number_input("📦 Batch Size (emails per round)", min_value=1, value=5)
     delay_seconds = st.number_input("⏳ Delay Between Emails (in seconds)", min_value=1, value=10)
 
@@ -342,45 +340,42 @@ with tab4:
             st.stop()
 
         try:
-            # Load leads
             df = pd.read_excel(leads_file)
             st.success(f"✅ Loaded {len(df)} leads from Excel.")
 
-            # Load email template
             template = template_file.read().decode("utf-8")
-
-            # Setup log
             log_rows = []
 
             for index, row in df.iterrows():
+                # Prepare dynamic replacement
+                row_dict = {col.lower().replace(" ", "_"): str(val) for col, val in row.items()}
+                row_dict.setdefault("recipient_name", "Leadership Team,")
+
+                # Fill placeholders in template
                 email_body = template
-                for column in df.columns:
-                    placeholder = f"{{{{{column.lower().replace(' ', '_')}}}}}"
-                    value = str(row[column])
-                    email_body = email_body.replace(placeholder, value)
+                for key, value in row_dict.items():
+                    # email_body = email_body.replace(f"{{{{{key}}}}}", value)
+                    email_body = email_body.replace(f"{{{key}}}", value)
 
 
                 company_name = row.get("Company Name", "your company")
-                # recipient_email = row.get("Email", "").strip()
                 recipient_email = str(row.get("Email", "")).strip()
 
                 if not recipient_email:
-                    recipient_email = "khsangani3344@gmail.com"  # <- Replace with your static email
+                    recipient_email = "khsangani3344@gmail.com"
                     st.info(f"ℹ️ Row {index+1} has no email. Using default: {recipient_email}")
 
-                # Rotate sender
                 sender = random.choice(senders)
                 sender_email = sender["email"]
                 app_password = sender["app_password"]
 
-                # recipient_name = "Team at " + company_name if company_name != "N/A" else "there"
                 subject = f"Let's connect - quick idea for {company_name}"
 
                 msg = MIMEMultipart("alternative")
                 msg["Subject"] = subject
                 msg["From"] = sender_email
                 msg["To"] = recipient_email
-                msg.attach(MIMEText(email_body, "html"))              
+                msg.attach(MIMEText(email_body, "html"))
 
                 try:
                     with smtplib.SMTP_SSL("smtp.gmail.com", 465) as server:
@@ -397,7 +392,7 @@ with tab4:
                     st.error(f"❌ Failed to send to {recipient_email}: {e}")
                     log_rows.append([
                         index + 1, company_name, recipient_email,
-                        subject, "Failed", datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        subject, f"Failed: {e}", datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                     ])
 
                 time.sleep(delay_seconds)
@@ -406,10 +401,18 @@ with tab4:
                     st.info("⏳ Batch sent. Pausing for 10 seconds...")
                     time.sleep(10)
 
-            # Show log
+            # Show and download logs
             log_df = pd.DataFrame(log_rows, columns=["#", "Company", "Email", "Subject", "Status", "Timestamp"])
             st.dataframe(log_df)
-            st.download_button("📥 Download Log CSV", data=log_df.to_csv(index=False), file_name="email_log.csv", mime="text/csv")
+
+            csv = log_df.to_csv(index=False).encode('utf-8')
+            excel_buffer = BytesIO()
+            log_df.to_excel(excel_buffer,index=False, engine='openpyxl')
+            excel_buffer.seek(0)
+            xlsx = excel_buffer.read()
+
+            st.download_button("📥 Download Log CSV", data=csv, file_name="email_log.csv", mime="text/csv")
+            st.download_button("📥 Download Log Excel", data=xlsx, file_name="email_log.xlsx", mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
             st.success("🎉 Bulk email campaign finished!")
 
@@ -418,77 +421,39 @@ with tab4:
 
 # ========== TASK 5: Campaign Analytics ==========
 with tab5:
-    st.header("📊 Campaign Analytics")
+    st.title("📊 Email Campaign Analytics")
 
-    email_log = st.file_uploader("📤 Upload Email Log CSV", type=["csv"])
-    open_log = st.file_uploader("📤 Upload Open/Click Tracking CSV", type=["csv"])
+    # Upload logs
+    open_file = st.file_uploader("📥 Upload Open Log (CSV)", type=["csv"])
+    click_file = st.file_uploader("📥 Upload Click Log (CSV)", type=["csv"])
 
-    if email_log and open_log:
-        try:
-            # Load files
-            emails = pd.read_csv(email_log)
-            emails.columns = emails.columns.str.strip().str.lower()
-            
-            email_col = next((col for col in emails.columns if "email" in col), None)
+    if open_file or click_file:
+        st.subheader("🔍 Lead Engagement Summary")
 
-            if not email_col:
-                st.error("❌ Could not find an email column in the uploaded file.")
-                st.write("📌 Columns detected:", emails.columns.tolist())
-            
-            else:
-                opens = pd.read_csv(open_log, names=["Email", "Action", "Time"])
-                opens["Time"] = pd.to_datetime(opens["Time"])
+        open_df = pd.read_csv(open_file, names=["Time", "Email", "Type"]) if open_file else pd.DataFrame(columns=["Email"])
+        click_df = pd.read_csv(click_file, names=["Time", "Email", "Type", "Link"]) if click_file else pd.DataFrame(columns=["Email"])
 
-                # Add LeadStatus column based on opens & clicks
-                def categorize_lead(email):
-                    engagement = opens[opens["Email"] == email]
-                    if engagement.empty:
-                        return "Cold"
-                    elif "click" in engagement["Action"].values:
-                        return "Hot"
-                    elif "open" in engagement["Action"].values:
-                        return "Warm"
-                    else:
-                        return "Cold"
+        all_leads = pd.concat([open_df["Email"], click_df["Email"]]).dropna().unique()
 
-                emails["LeadStatus"] = emails["email"].apply(categorize_lead)
+        lead_status = []
+        for email in all_leads:
+            opened = email in open_df["Email"].values
+            clicked = email in click_df["Email"].values
+            category = "Hot Lead" if clicked else "Warm Lead" if opened else "Cold Lead"
+            lead_status.append({"Email": email, "Opened": opened, "Clicked": clicked, "Status": category})
 
-                # Save updated analytics
-                st.success("✅ Engagement data processed!")
-                st.subheader("📈 Summary Metrics")
+        report_df = pd.DataFrame(lead_status)
+        st.dataframe(report_df)
 
-                total_sent = len(emails)
-                hot_leads = emails[emails["LeadStatus"] == "Hot"]
-                warm_leads = emails[emails["LeadStatus"] == "Warm"]
-                cold_leads = emails[emails["LeadStatus"] == "Cold"]
+        # Metrics
+        st.metric("📨 Total Emails Tracked", len(all_leads))
+        st.metric("📬 Open Rate", f"{len(open_df['Email'].unique())} ({len(open_df['Email'].unique()) / len(all_leads)*100:.1f}%)")
+        st.metric("🔗 Click Rate", f"{len(click_df['Email'].unique())} ({len(click_df['Email'].unique()) / len(all_leads)*100:.1f}%)")
+        st.metric("🔥 Hot Leads", len(report_df[report_df['Status'] == "Hot Lead"]))
+        st.metric("❄️ Cold Leads", len(report_df[report_df['Status'] == "Cold Lead"]))
 
-                col1, col2, col3, col4 = st.columns(4)
-                col1.metric("📨 Total Sent", total_sent)
-                col2.metric("🔥 Hot Leads", len(hot_leads))
-                col3.metric("🌤 Warm Leads", len(warm_leads))
-                col4.metric("🧊 Cold Leads", len(cold_leads))
-
-                # Pie Chart Visualization
-                fig = px.pie(
-                    names=["Hot", "Warm", "Cold"],
-                    values=[len(hot_leads), len(warm_leads), len(cold_leads)],
-                    title="💡 Lead Engagement Distribution",
-                    color_discrete_sequence=["#FF6347", "#FFA500", "#87CEEB"]
-                )
-                st.plotly_chart(fig)
-
-                # Full Log Preview
-                st.subheader("📄 Full Email Log with Lead Status")
-                st.dataframe(emails)
-
-                # Download Buttons
-                st.download_button("📥 Download Full Analytics", data=emails.to_csv(index=False), file_name="analytics_output.csv", mime="text/csv")
-                st.download_button("🔥 Download Hot Leads", data=hot_leads.to_csv(index=False), file_name="hot_leads.csv", mime="text/csv")
-                st.download_button("🌤 Download Warm Leads", data=warm_leads.to_csv(index=False), file_name="warm_leads.csv", mime="text/csv")
-                st.download_button("🧊 Download Cold Leads", data=cold_leads.to_csv(index=False), file_name="cold_leads.csv", mime="text/csv")
-
-        except Exception as e:
-            st.error(f"❌ Error while processing analytics: {e}")
-
+        # Download
+        csv = report_df.to_csv(index=False).encode("utf-8")
+        st.download_button("📥 Download Full Report (CSV)", data=csv, file_name="analytics_report.csv", mime="text/csv")
     else:
-        st.info("ℹ️ Please upload both the Email Log and Tracking Log CSVs to view analytics.")
+        st.info("ℹ️ Upload open.csv and/or click.csv to analyze engagement.")
